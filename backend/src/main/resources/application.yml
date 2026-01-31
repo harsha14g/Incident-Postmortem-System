@@ -1,0 +1,29 @@
+spring:
+  application:
+    name: incident-postmortem-system
+
+  # MongoDB configuration (we'll set this up in Step 3)
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/incident-kb}
+      database: incident-kb
+
+# OpenAI configuration (we'll get API key later)
+openai:
+  api-key: ${OPENAI_API_KEY:your-api-key-here}
+  model:
+    chat: gpt-4o-mini
+    embedding: text-embedding-3-small
+
+# Server configuration
+server:
+  port: 8080
+  error:
+    include-message: always
+    include-binding-errors: always
+
+# Logging
+logging:
+  level:
+    com.incidentkb: DEBUG
+    org.springframework.data.mongodb: DEBUG
