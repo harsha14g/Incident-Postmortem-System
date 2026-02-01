@@ -8,12 +8,11 @@ spring:
       uri: ${MONGODB_URI:mongodb://localhost:27017/incident-kb}
       database: incident-kb
 
-# OpenAI configuration (we'll get API key later)
-openai:
-  api-key: ${OPENAI_API_KEY:your-api-key-here}
-  model:
-    chat: gpt-4o-mini
-    embedding: text-embedding-3-small
+# Google Gemini configuration
+gemini:
+  api-key: ${GEMINI_API_KEY:your-api-key-here}
+  model: gemini-1.5-flash
+  embedding-model: text-embedding-004
 
 # Server configuration
 server:

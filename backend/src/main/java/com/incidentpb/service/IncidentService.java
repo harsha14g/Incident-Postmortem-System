@@ -2,6 +2,7 @@ package com.incidentpb.service;
 
 import com.incidentpb.domain.Incident;
 import com.incidentpb.domain.IncidentMetadata;
+import com.incidentpb.domain.IncidentSummary;
 import com.incidentpb.domain.Severity;
 import com.incidentpb.repository.IncidentRepository;
 import com.incidentpb.api.dto.CreateIncidentRequest;
@@ -23,6 +24,7 @@ import java.util.Optional;
 public class IncidentService {
 
     private final IncidentRepository incidentRepository;
+    private final GeminiAIService geminiAIService;
 
     /**
      * Create incident from request
@@ -30,6 +32,12 @@ public class IncidentService {
     @Transactional
     public Incident createIncident(CreateIncidentRequest request) {
         log.info("Creating new incident: {}", request.getTitle());
+        IncidentSummary summary = geminiAIService.generateSummary(
+            request.getTitle(), 
+            request.getRawContent()
+        );
+        String embeddingText = request.getTitle() + "\n" + request.getRawContent();
+        List<Float> embedding = geminiAIService.generateEmbedding(embeddingText);
         Incident incident = Incident.builder()
             .title(request.getTitle())
             .rawContent(request.getRawContent())
