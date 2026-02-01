@@ -1,0 +1,8 @@
+spring:
+  data:
+    mongodb:
+      uri: mongodb+srv://incident_pb_user:rlNeWN5lXbNrv89m@incident-pb-cluster.rou82od.mongodb.net/?appName=incident-pb-cluster
+
+logging:
+  level:
+    com.incidentkb: DEBUG

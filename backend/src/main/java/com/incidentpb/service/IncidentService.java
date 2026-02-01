@@ -1,8 +1,10 @@
 package com.incidentpb.service;
 
 import com.incidentpb.domain.Incident;
+import com.incidentpb.domain.IncidentMetadata;
 import com.incidentpb.domain.Severity;
 import com.incidentpb.repository.IncidentRepository;
+import com.incidentpb.api.dto.CreateIncidentRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -23,17 +25,20 @@ public class IncidentService {
     private final IncidentRepository incidentRepository;
 
     /**
-     * Save a new incident
+     * Create incident from request
      */
     @Transactional
-    public Incident createIncident(Incident incident) {
-        log.info("Creating new incident: {}", incident.getTitle());
-        
-        // Set timestamps (will be auto-set by @CreatedDate, but being explicit)
-        Instant now = Instant.now();
-        incident.setCreatedAt(now);
-        incident.setUpdatedAt(now);
-        
+    public Incident createIncident(CreateIncidentRequest request) {
+        log.info("Creating new incident: {}", request.getTitle());
+        Incident incident = Incident.builder()
+            .title(request.getTitle())
+            .rawContent(request.getRawContent())
+            .severity(request.getSeverity())
+            .services(request.getServices())
+            .occurredAt(request.getOccurredAt() != null ? request.getOccurredAt() : Instant.now())
+            .source(request.getSource() != null ? request.getSource() : "Manual Upload")
+            .metadata(buildMetadata(request))
+            .build();
         return incidentRepository.save(incident);
     }
 
@@ -79,5 +84,18 @@ public class IncidentService {
      */
     public long getIncidentCount() {
         return incidentRepository.count();
+    }
+
+    /**
+     * Build metadata from request
+     */
+    private IncidentMetadata buildMetadata(CreateIncidentRequest request) {
+        if (request.getTeam() == null && request.getEnvironment() == null) {
+            return null;
+        }
+        return IncidentMetadata.builder()
+            .team(request.getTeam())
+            .environment(request.getEnvironment())
+            .build();
     }
 }
