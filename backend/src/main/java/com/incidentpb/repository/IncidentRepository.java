@@ -43,4 +43,11 @@ public interface IncidentRepository extends MongoRepository<Incident, String> {
      */
     @Query("{ 'title': { $regex: ?0, $options: 'i' } }")
     List<Incident> searchByTitle(String keyword);
+
+    /**
+     * Find all incidents that have embeddings
+     * (for semantic search - we filter and sort in code)
+     */
+    @Query("{ 'embedding': { $exists: true, $ne: [] } }")
+    List<Incident> findAllWithEmbeddings();
 }

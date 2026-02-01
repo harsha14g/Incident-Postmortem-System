@@ -15,9 +15,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * Business logic for incident management
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -26,77 +23,66 @@ public class IncidentService {
     private final IncidentRepository incidentRepository;
     private final GeminiAIService geminiAIService;
 
-    /**
-     * Create incident from request
-     */
     @Transactional
     public Incident createIncident(CreateIncidentRequest request) {
         log.info("Creating new incident: {}", request.getTitle());
+        log.info("About to call Gemini AI service...");
         IncidentSummary summary = geminiAIService.generateSummary(
             request.getTitle(), 
             request.getRawContent()
         );
+        log.info("AI summary generated: {}", summary != null ? "SUCCESS" : "FAILED");
         String embeddingText = request.getTitle() + "\n" + request.getRawContent();
+        log.info("About to generate embedding...");
         List<Float> embedding = geminiAIService.generateEmbedding(embeddingText);
+        log.info("Embedding generated with {} dimensions", embedding.size());
         Incident incident = Incident.builder()
-            .title(request.getTitle())
-            .rawContent(request.getRawContent())
-            .severity(request.getSeverity())
-            .services(request.getServices())
-            .occurredAt(request.getOccurredAt() != null ? request.getOccurredAt() : Instant.now())
-            .source(request.getSource() != null ? request.getSource() : "Manual Upload")
-            .metadata(buildMetadata(request))
-            .build();
-        return incidentRepository.save(incident);
+                .title(request.getTitle())
+                .rawContent(request.getRawContent())
+                .summary(summary)
+                .embedding(embedding)
+                .severity(request.getSeverity())
+                .services(request.getServices())
+                .occurredAt(request.getOccurredAt() != null ? request.getOccurredAt() : Instant.now())
+                .source(request.getSource() != null ? request.getSource() : "Manual Upload")
+                .metadata(buildMetadata(request))
+                .build();
+
+        Incident saved = incidentRepository.save(incident);
+        log.info("Incident saved with ID: {}, has summary: {}, embedding size: {}", 
+            saved.getId(), 
+            saved.getSummary() != null,
+            saved.getEmbedding() != null ? saved.getEmbedding().size() : 0);
+        
+        return saved;
     }
 
-    /**
-     * Get incident by ID
-     */
     public Optional<Incident> getIncidentById(String id) {
         return incidentRepository.findById(id);
     }
 
-    /**
-     * Get all incidents
-     */
     public List<Incident> getAllIncidents() {
         return incidentRepository.findAll();
     }
 
-    /**
-     * Find incidents by severity
-     */
     public List<Incident> getIncidentsBySeverity(Severity severity) {
         return incidentRepository.findBySeverity(severity);
     }
 
-    /**
-     * Find incidents affecting a service
-     */
     public List<Incident> getIncidentsByService(String service) {
         return incidentRepository.findByServicesContaining(service);
     }
 
-    /**
-     * Delete incident by ID
-     */
     @Transactional
     public void deleteIncident(String id) {
         log.info("Deleting incident: {}", id);
         incidentRepository.deleteById(id);
     }
 
-    /**
-     * Get incident count
-     */
     public long getIncidentCount() {
         return incidentRepository.count();
     }
 
-    /**
-     * Build metadata from request
-     */
     private IncidentMetadata buildMetadata(CreateIncidentRequest request) {
         if (request.getTeam() == null && request.getEnvironment() == null) {
             return null;

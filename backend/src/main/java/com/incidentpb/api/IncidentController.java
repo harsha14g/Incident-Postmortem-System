@@ -16,9 +16,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.incidentpb.api.dto.CreateIncidentRequest;
 import com.incidentpb.api.dto.IncidentResponse;
+import com.incidentpb.api.dto.SearchRequest;
+import com.incidentpb.api.dto.SearchResultResponse;
 import com.incidentpb.domain.Incident;
 import com.incidentpb.domain.Severity;
 import com.incidentpb.service.IncidentService;
+import com.incidentpb.service.SemanticSearchService;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +37,7 @@ import lombok.extern.slf4j.Slf4j;
 public class IncidentController {
 
     private final IncidentService incidentService;
+    private final SemanticSearchService semanticSearchService;
 
     /**
      * Create a new incident
@@ -105,5 +109,30 @@ public class IncidentController {
         return ResponseEntity.ok(new Object() {
             public final long totalIncidents = incidentService.getIncidentCount();
         });
+    }
+
+    /**
+     * POST Endpoint for Semantic Search
+     */
+    @PostMapping("/search")
+    public ResponseEntity<SearchResultResponse> searchIncidents(@Valid @RequestBody SearchRequest request) {
+        log.info("Semantic search query: '{}', limit: {}", request.getQuery(), request.getLimit());
+        var results = semanticSearchService.searchSimilarIncidents(
+            request.getQuery(), 
+            request.getLimit()
+        );
+        return ResponseEntity.ok(SearchResultResponse.from(request.getQuery(), results));
+    }
+
+    /**
+     * GET Endpoint for Semantic Search (testing)
+     */
+    @GetMapping("/search")
+    public ResponseEntity<SearchResultResponse> searchIncidentsGet(@RequestParam("q") String query,
+            @RequestParam(defaultValue = "10") int limit) {
+        
+        log.info("Semantic search query: '{}', limit: {}", query, limit);
+        var results = semanticSearchService.searchSimilarIncidents(query, Math.min(limit, 50));
+        return ResponseEntity.ok(SearchResultResponse.from(query, results));
     }
 }
