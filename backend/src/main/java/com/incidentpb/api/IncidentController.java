@@ -1,6 +1,8 @@
 package com.incidentpb.api;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatus;
@@ -20,6 +22,7 @@ import com.incidentpb.api.dto.SearchRequest;
 import com.incidentpb.api.dto.SearchResultResponse;
 import com.incidentpb.domain.Incident;
 import com.incidentpb.domain.Severity;
+import com.incidentpb.repository.IncidentRepository;
 import com.incidentpb.service.IncidentService;
 import com.incidentpb.service.SemanticSearchService;
 
@@ -27,9 +30,6 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-/**
- * REST API for incident management
- */
 @RestController
 @RequestMapping("/api/incidents")
 @RequiredArgsConstructor
@@ -38,6 +38,7 @@ public class IncidentController {
 
     private final IncidentService incidentService;
     private final SemanticSearchService semanticSearchService;
+    private final IncidentRepository incidentRepository;
 
     /**
      * Create a new incident
@@ -89,19 +90,6 @@ public class IncidentController {
     }
 
     /**
-     * Delete incident
-     */
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteIncident(@PathVariable String id) {
-        log.info("Deleting incident with ID: {}", id);
-        if (incidentService.getIncidentById(id).isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
-        incidentService.deleteIncident(id);
-        return ResponseEntity.noContent().build();
-    }
-
-    /**
      * Get statistics
      */
     @GetMapping("/stats")
@@ -135,4 +123,18 @@ public class IncidentController {
         var results = semanticSearchService.searchSimilarIncidents(query, Math.min(limit, 50));
         return ResponseEntity.ok(SearchResultResponse.from(query, results));
     }
+    
+    @DeleteMapping("/all")
+    public ResponseEntity<?> deleteAll() {
+        log.warn("DELETING ALL INCIDENTS - This should only be used in development!");
+        long countBefore = incidentService.getIncidentCount();
+        incidentRepository.deleteAll();
+        long countAfter = incidentService.getIncidentCount();
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "All incidents deleted");
+        response.put("deletedCount", countBefore);
+        response.put("remainingCount", countAfter);
+        return ResponseEntity.ok(response);
+    }
+
 }

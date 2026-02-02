@@ -12,9 +12,6 @@ import com.incidentpb.repository.IncidentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-/**
- * Service for semantic search using vector embeddings
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -22,14 +19,8 @@ public class SemanticSearchService {
 
     private final IncidentRepository incidentRepository;
     private final GeminiAIService geminiAIService;
+    private static final double SIMILARITY_THRESHOLD = 0.80;
 
-    /**
-     * Search for incidents similar to the query text
-     * 
-     * @param query The search query
-     * @param limit Maximum number of results to return
-     * @return List of incidents sorted by similarity
-     */
     public List<IncidentSearchResult> searchSimilarIncidents(String query, int limit) {
         log.info("Performing semantic search for: {}", query);
         List<Float> queryEmbedding = geminiAIService.generateEmbedding(query);
@@ -37,25 +28,28 @@ public class SemanticSearchService {
             log.warn("Failed to generate embedding for query, falling back to text search");
             return fallbackTextSearch(query, limit);
         }
-        List<Incident> incidents = incidentRepository.findAllWithEmbeddings();
-        log.debug("Found {} incidents with embeddings", incidents.size());
+        List<Incident> allIncidents = incidentRepository.findAll();
+        log.debug("Total incidents in DB: {}", allIncidents.size());
+        
+        List<Incident> incidents = allIncidents.stream()
+            .filter(i -> i.getEmbedding() != null && !i.getEmbedding().isEmpty())
+            .collect(Collectors.toList());
+        
+        log.info("Found {} incidents with embeddings", incidents.size());
         List<IncidentSearchResult> results = incidents.stream()
                 .map(incident -> {
                     double similarity = cosineSimilarity(queryEmbedding, incident.getEmbedding());
+                    log.debug("Similarity for '{}': {}", incident.getTitle(), similarity);
                     return new IncidentSearchResult(incident, similarity);
                 })
-                .filter(result -> result.getSimilarity() > 0.5) // Only return reasonably similar results
+                .filter(result -> result.getSimilarity() > SIMILARITY_THRESHOLD) // Use lower threshold
                 .sorted(Comparator.comparingDouble(IncidentSearchResult::getSimilarity).reversed())
                 .limit(limit)
                 .collect(Collectors.toList());
-        log.info("Found {} similar incidents", results.size());
+        log.info("Found {} similar incidents (threshold: {})", results.size(), SIMILARITY_THRESHOLD);
         return results;
     }
 
-    /**
-     * Calculate cosine similarity between two vectors
-     * Formula: cos(θ) = (A · B) / (||A|| * ||B||)
-     */
     private double cosineSimilarity(List<Float> vectorA, List<Float> vectorB) {
         if (vectorA.size() != vectorB.size()) {
             log.warn("Vector size mismatch: {} vs {}", vectorA.size(), vectorB.size());
@@ -72,12 +66,10 @@ public class SemanticSearchService {
         if (normA == 0.0 || normB == 0.0) {
             return 0.0;
         }
-        return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+        double similarity = dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+        return similarity;
     }
 
-    /**
-     * Fallback to simple text search if embeddings fail
-     */
     private List<IncidentSearchResult> fallbackTextSearch(String query, int limit) {
         List<Incident> incidents = incidentRepository.searchByTitle(query);
         return incidents.stream()
@@ -86,9 +78,6 @@ public class SemanticSearchService {
             .collect(Collectors.toList());
     }
 
-    /**
-     * Search result with similarity score
-     */
     public static class IncidentSearchResult {
         private final Incident incident;
         private final double similarity;

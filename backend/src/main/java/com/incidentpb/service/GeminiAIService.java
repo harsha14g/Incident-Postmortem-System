@@ -1,25 +1,29 @@
 package com.incidentpb.service;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.incidentpb.domain.IncidentSummary;
-import lombok.extern.slf4j.Slf4j;
-import okhttp3.*;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-/**
- * AI Service using Google Gemini (FREE)
- * Updated to use Gemini 2.0 Flash and Header-based Auth
- */
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
+import org.springframework.stereotype.Service;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.incidentpb.domain.IncidentSummary;
+
+import lombok.extern.slf4j.Slf4j;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+
 @Service
 @Slf4j
+@Profile("!mock")
 public class GeminiAIService {
 
     @Value("${gemini.api-key}")
@@ -43,7 +47,7 @@ public class GeminiAIService {
     }
 
     public IncidentSummary generateSummary(String title, String content) {
-        log.info("Generating AI summary with Gemini ({}) for: {}", model, title);
+        log.info("Generating AI summary with Gemini for incident: {}", title);
         try {
             String prompt = buildSummarizationPrompt(title, content);
             String response = callGemini(prompt);
@@ -55,6 +59,7 @@ public class GeminiAIService {
     }
 
     public List<Float> generateEmbedding(String text) {
+        log.debug("Generating embedding with Gemini for text of length: {}", text.length());
         try {
             return callGeminiEmbedding(text);
         } catch (Exception e) {
@@ -65,50 +70,63 @@ public class GeminiAIService {
 
     private String buildSummarizationPrompt(String title, String content) {
         return String.format("""
-            You are an expert SRE. Extract structured information from this incident.
+            You are an expert SRE analyzing a production incident. Extract structured information.
+
+            Incident Title: %s
             
-            Title: %s
-            Details: %s
+            Incident Details:
+            %s
             
-            Format response with these exact headers:
+            Provide a structured summary in the following format (use ## markers):
+            
             ## SHORT_SUMMARY
+            One sentence summary of what happened.
+            
             ## ROOT_CAUSE
+            What caused the incident? Be specific and technical.
+            
             ## IMPACT
+            What was the business and technical impact? Who was affected?
+            
             ## RESOLUTION
+            How was the incident resolved? What actions were taken?
+            
             ## PREVENTION
+            How can we prevent this from happening again? Specific actionable steps.
+            
+            Keep each section concise but informative. Use technical language.
             """, title, content);
     }
 
     private String callGemini(String prompt) throws IOException {
-        String url = GEMINI_API_URL + model + ":generateContent";
+        String url = GEMINI_API_URL + model + ":generateContent?key=" + apiKey;
 
         JsonObject requestBody = new JsonObject();
         JsonArray contents = new JsonArray();
-        JsonObject contentObj = new JsonObject();
+        JsonObject content = new JsonObject();
         JsonArray parts = new JsonArray();
         JsonObject part = new JsonObject();
-
+        
         part.addProperty("text", prompt);
         parts.add(part);
-        contentObj.add("parts", parts);
-        contents.add(contentObj);
+        content.add("parts", parts);
+        contents.add(content);
         requestBody.add("contents", contents);
-
+        JsonObject generationConfig = new JsonObject();
+        generationConfig.addProperty("temperature", 0.3);
+        generationConfig.addProperty("maxOutputTokens", 1000);
+        requestBody.add("generationConfig", generationConfig);
         RequestBody body = RequestBody.create(gson.toJson(requestBody), JSON);
         Request request = new Request.Builder()
                 .url(url)
-                .addHeader("x-goog-api-key", apiKey)
                 .post(body)
                 .build();
 
         try (Response response = httpClient.newCall(request).execute()) {
-            String responseBody = response.body() != null ? response.body().string() : "";
-            
             if (!response.isSuccessful()) {
-                log.error("Gemini API Error: {} - Response: {}", response.code(), responseBody);
-                throw new IOException("Gemini API error: " + response.code());
+                throw new IOException("Gemini API error: " + response.code() + " - " + response.message());
             }
-
+            String responseBody = response.body().string();
             JsonObject jsonResponse = gson.fromJson(responseBody, JsonObject.class);
             return jsonResponse
                 .getAsJsonArray("candidates").get(0)
@@ -121,27 +139,27 @@ public class GeminiAIService {
     }
 
     private List<Float> callGeminiEmbedding(String text) throws IOException {
-        String url = GEMINI_API_URL + "text-embedding-004:embedContent";
+        String url = GEMINI_API_URL + "text-embedding-004:embedContent?key=" + apiKey;
 
         JsonObject requestBody = new JsonObject();
-        JsonObject contentObj = new JsonObject();
+        JsonObject content = new JsonObject();
         JsonArray parts = new JsonArray();
         JsonObject part = new JsonObject();
         
         part.addProperty("text", text.substring(0, Math.min(text.length(), 2048)));
         parts.add(part);
-        contentObj.add("parts", parts);
-        requestBody.add("content", contentObj);
+        content.add("parts", parts);
+        requestBody.add("content", content);
 
         RequestBody body = RequestBody.create(gson.toJson(requestBody), JSON);
         Request request = new Request.Builder()
-                .url(url)
-                .addHeader("x-goog-api-key", apiKey)
-                .post(body)
-                .build();
+            .url(url)
+            .post(body)
+            .build();
 
         try (Response response = httpClient.newCall(request).execute()) {
             if (!response.isSuccessful()) {
+                log.warn("Gemini embedding API error: {} - {}", response.code(), response.message());
                 return new ArrayList<>();
             }
             String responseBody = response.body().string();
@@ -158,12 +176,18 @@ public class GeminiAIService {
     }
 
     private IncidentSummary parseSummaryResponse(String response) {
+        String shortSummary = extractSection(response, "SHORT_SUMMARY");
+        String rootCause = extractSection(response, "ROOT_CAUSE");
+        String impact = extractSection(response, "IMPACT");
+        String resolution = extractSection(response, "RESOLUTION");
+        String prevention = extractSection(response, "PREVENTION");
+
         return IncidentSummary.builder()
-            .shortSummary(extractSection(response, "SHORT_SUMMARY"))
-            .rootCause(extractSection(response, "ROOT_CAUSE"))
-            .impact(extractSection(response, "IMPACT"))
-            .resolution(extractSection(response, "RESOLUTION"))
-            .prevention(extractSection(response, "PREVENTION"))
+            .shortSummary(shortSummary)
+            .rootCause(rootCause)
+            .impact(impact)
+            .resolution(resolution)
+            .prevention(prevention)
             .build();
     }
 
@@ -171,11 +195,9 @@ public class GeminiAIService {
         String marker = "## " + sectionName;
         int start = response.indexOf(marker);
         if (start == -1) return "Not available";
-        
         start += marker.length();
         int end = response.indexOf("## ", start);
         if (end == -1) end = response.length();
-        
         return response.substring(start, end).trim();
     }
 

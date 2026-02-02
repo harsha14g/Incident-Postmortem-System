@@ -43,7 +43,7 @@ class SemanticSearchServiceTest {
         List<SemanticSearchService.IncidentSearchResult> results = 
             searchService.searchSimilarIncidents("Redis performance problem", 5);
         assertFalse(results.isEmpty());
-        assertTrue(results.size() >= 2); // At least Redis and cache incidents
+        assertTrue(results.size() >= 2);
         assertTrue(results.get(0).getSimilarity() > 0.5);
     }
 

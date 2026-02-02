@@ -1,17 +1,19 @@
 package com.incidentpb.repository;
 
-import com.incidentpb.domain.Incident;
-import com.incidentpb.domain.Severity;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest;
-
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.AfterEach;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest;
+
+import com.incidentpb.domain.Incident;
+import com.incidentpb.domain.Severity;
 
 @DataMongoTest
 class IncidentRepositoryTest {
@@ -26,7 +28,6 @@ class IncidentRepositoryTest {
 
     @Test
     void shouldSaveAndRetrieveIncident() {
-        // Given
         Incident incident = Incident.builder()
                 .title("Database connection timeout")
                 .rawContent("Production database became unresponsive at 14:30 UTC")
@@ -35,11 +36,7 @@ class IncidentRepositoryTest {
                 .occurredAt(Instant.now())
                 .source("PagerDuty")
                 .build();
-
-        // When
         Incident saved = incidentRepository.save(incident);
-
-        // Then
         assertNotNull(saved.getId());
         assertEquals("Database connection timeout", saved.getTitle());
         assertEquals(Severity.CRITICAL, saved.getSeverity());
@@ -48,15 +45,10 @@ class IncidentRepositoryTest {
 
     @Test
     void shouldFindIncidentsBySeverity() {
-        // Given
         createTestIncident("Critical Issue 1", Severity.CRITICAL);
         createTestIncident("Critical Issue 2", Severity.CRITICAL);
         createTestIncident("Medium Issue", Severity.MEDIUM);
-
-        // When
         List<Incident> criticalIncidents = incidentRepository.findBySeverity(Severity.CRITICAL);
-
-        // Then
         assertEquals(2, criticalIncidents.size());
         assertTrue(criticalIncidents.stream()
                 .allMatch(i -> i.getSeverity() == Severity.CRITICAL));
@@ -64,7 +56,6 @@ class IncidentRepositoryTest {
 
     @Test
     void shouldFindIncidentsByService() {
-        // Given
         Incident incident1 = createTestIncident("Redis issue", Severity.HIGH);
         incident1.setServices(Set.of("cache-service", "redis"));
         incidentRepository.save(incident1);
@@ -77,28 +68,20 @@ class IncidentRepositoryTest {
         incident3.setServices(Set.of("postgres"));
         incidentRepository.save(incident3);
 
-        // When
         List<Incident> redisIncidents = incidentRepository.findByServicesContaining("redis");
-
-        // Then
         assertEquals(2, redisIncidents.size());
     }
 
     @Test
     void shouldSearchByTitle() {
-        // Given
         createTestIncident("Redis latency spike", Severity.HIGH);
         createTestIncident("Database connection pool exhausted", Severity.CRITICAL);
         createTestIncident("Redis connection timeout", Severity.MEDIUM);
 
-        // When
         List<Incident> results = incidentRepository.searchByTitle("redis");
-
-        // Then
         assertEquals(2, results.size());
     }
 
-    // Helper method
     private Incident createTestIncident(String title, Severity severity) {
         Incident incident = Incident.builder()
                 .title(title)
